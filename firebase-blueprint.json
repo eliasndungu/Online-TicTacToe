@@ -1,0 +1,222 @@
+{
+  "entities": {
+    "Game": {
+      "title": "Game",
+      "description": "Turn-based Tic-Tac-Toe match record",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Game document identifier",
+          "maxLength": 128
+        },
+        "shortCode": {
+          "type": "string",
+          "description": "6-character match sharing code",
+          "maxLength": 8
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["ai", "multiplayer"],
+          "description": "Match type against AI or human opponent"
+        },
+        "aiDifficulty": {
+          "type": "string",
+          "enum": ["unbeatable", "medium", "easy"],
+          "description": "AI minimax algorithm depth and variation"
+        },
+        "playerXId": {
+          "type": "string",
+          "description": "User UID of Player X",
+          "maxLength": 128
+        },
+        "playerXName": {
+          "type": "string",
+          "description": "Display name of Player X",
+          "maxLength": 64
+        },
+        "playerXPhoto": {
+          "type": "string",
+          "description": "Avatar URL of Player X",
+          "maxLength": 512
+        },
+        "playerOId": {
+          "type": "string",
+          "description": "User UID of Player O or 'ai'",
+          "maxLength": 128
+        },
+        "playerOName": {
+          "type": "string",
+          "description": "Display name of Player O",
+          "maxLength": 64
+        },
+        "playerOPhoto": {
+          "type": "string",
+          "description": "Avatar URL of Player O",
+          "maxLength": 512
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "in_progress", "completed", "abandoned"],
+          "description": "Current status of the match"
+        },
+        "winner": {
+          "type": "string",
+          "enum": ["X", "O", "draw", "none"],
+          "description": "Winner result or draw"
+        },
+        "winningLine": {
+          "type": "array",
+          "description": "Array of 3 cell indices representing winning row/col/diagonal"
+        },
+        "currentTurn": {
+          "type": "string",
+          "enum": ["X", "O"],
+          "description": "Whose turn it currently is"
+        },
+        "totalEvents": {
+          "type": "number",
+          "description": "Monotonically incrementing count of events"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when match was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when match was last updated"
+        }
+      },
+      "required": [
+        "id",
+        "shortCode",
+        "mode",
+        "playerXId",
+        "playerXName",
+        "status",
+        "winner",
+        "currentTurn",
+        "totalEvents"
+      ]
+    },
+    "GameEvent": {
+      "title": "GameEvent",
+      "description": "Event sourcing log entry representing a move or time-travel rollback",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique event identifier",
+          "maxLength": 128
+        },
+        "gameId": {
+          "type": "string",
+          "description": "Parent game identifier",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "enum": ["MOVE", "ROLLBACK"],
+          "description": "Action type"
+        },
+        "sequence": {
+          "type": "number",
+          "description": "Monotonic 1-based event counter in stream"
+        },
+        "turnNumber": {
+          "type": "number",
+          "description": "Move number resulting from this action"
+        },
+        "player": {
+          "type": "string",
+          "enum": ["X", "O", "system"],
+          "description": "Mark or actor who performed the action"
+        },
+        "playerId": {
+          "type": "string",
+          "description": "UID of the player or 'ai'",
+          "maxLength": 128
+        },
+        "cellIndex": {
+          "type": "number",
+          "description": "Board position (0-8) for MOVE events, or -1 for ROLLBACK"
+        },
+        "targetTurnNumber": {
+          "type": "number",
+          "description": "Historical turn number target for ROLLBACK events, or -1 for MOVE"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp of the event"
+        }
+      },
+      "required": [
+        "id",
+        "gameId",
+        "type",
+        "sequence",
+        "turnNumber",
+        "player",
+        "playerId",
+        "cellIndex"
+      ]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public user stats and display info",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "User UID",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Player screen name",
+          "maxLength": 64
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar photo URL",
+          "maxLength": 512
+        },
+        "gamesPlayed": {
+          "type": "number",
+          "description": "Total matches played"
+        },
+        "wins": {
+          "type": "number",
+          "description": "Total wins"
+        },
+        "losses": {
+          "type": "number",
+          "description": "Total losses"
+        },
+        "draws": {
+          "type": "number",
+          "description": "Total draws"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp of last stats update"
+        }
+      },
+      "required": ["id", "displayName", "gamesPlayed", "wins", "losses", "draws"]
+    }
+  },
+  "firestore": {
+    "/games/{gameId}": {
+      "schema": "Game",
+      "description": "Collection of Tic-Tac-Toe games"
+    },
+    "/games/{gameId}/events/{eventId}": {
+      "schema": "GameEvent",
+      "description": "Subcollection storing every move and rollback event"
+    },
+    "/users/{userId}/public/profile": {
+      "schema": "UserProfile",
+      "description": "Public profile and leader statistics"
+    }
+  }
+}

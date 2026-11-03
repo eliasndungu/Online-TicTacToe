@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isGameParticipant(gameData) {
+      return isSignedIn() && (
+        request.auth.uid == gameData.playerXId ||
+        (gameData.get('playerOId', '') != '' && request.auth.uid == gameData.playerOId)
+      );
+    }
+
+    function isValidGame(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.shortCode is string && data.shortCode.size() <= 8 &&
+        data.mode in ['ai', 'multiplayer'] &&
+        (data.get('aiDifficulty', '') in ['', 'unbeatable', 'medium', 'easy']) &&
+        data.playerXId is string && isValidId(data.playerXId) &&
+        data.playerXName is string && data.playerXName.size() <= 64 &&
+        (data.get('playerXPhoto', '') is string && data.get('playerXPhoto', '').size() <= 512) &&
+        (data.get('playerOId', null) == null || (data.playerOId is string && data.playerOId.size() <= 128)) &&
+        (data.get('playerOName', '') is string && data.get('playerOName', '').size() <= 64) &&
+        (data.get('playerOPhoto', '') is string && data.get('playerOPhoto', '').size() <= 512) &&
+        data.status in ['waiting', 'in_progress', 'completed', 'abandoned'] &&
+        data.winner in ['X', 'O', 'draw', 'none'] &&
+        (data.get('winningLine', null) == null || data.winningLine is list) &&
+        data.currentTurn in ['X', 'O'] &&
+        data.totalEvents is number && data.totalEvents >= 0;
+    }
+
+    function isValidEvent(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.gameId is string && isValidId(data.gameId) &&
+        data.type in ['MOVE', 'ROLLBACK'] &&
+        data.sequence is number && data.sequence >= 1 &&
+        data.turnNumber is number && data.turnNumber >= 0 &&
+        data.player in ['X', 'O', 'system'] &&
+        data.playerId is string && data.playerId.size() <= 128 &&
+        data.cellIndex is number && data.cellIndex >= -1 && data.cellIndex <= 8 &&
+        (data.get('targetTurnNumber', null) == null || (data.targetTurnNumber is number && data.targetTurnNumber >= -1));
+    }
+
+    function isValidUserProfile(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.displayName is string && data.displayName.size() <= 64 &&
+        (data.get('photoURL', '') is string && data.get('photoURL', '').size() <= 512) &&
+        data.gamesPlayed is number && data.gamesPlayed >= 0 &&
+        data.wins is number && data.wins >= 0 &&
+        data.losses is number && data.losses >= 0 &&
+        data.draws is number && data.draws >= 0;
+    }
+
+    // Match Rules
+    match /games/{gameId} {
+      allow get: if isSignedIn() && isValidId(gameId);
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+        isValidId(gameId) &&
+        isValidGame(incoming()) &&
+        incoming().playerXId == request.auth.uid &&
+        incoming().id == gameId;
+
+      allow update: if isSignedIn() &&
+        isValidId(gameId) &&
+        isValidGame(incoming()) &&
+        incoming().playerXId == existing().playerXId &&
+        (
+          (
+            existing().status == 'waiting' &&
+            existing().get('playerOId', null) == null &&
+            incoming().playerOId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['playerOId', 'playerOName', 'playerOPhoto', 'status', 'updatedAt'])
+          ) ||
+          (
+            isGameParticipant(existing()) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'winner', 'winningLine', 'currentTurn', 'totalEvents', 'updatedAt',
+              'playerOName', 'playerOPhoto'
+            ])
+          )
+        );
+
+      allow delete: if isSignedIn() && existing().playerXId == request.auth.uid;
+
+      match /events/{eventId} {
+        allow get: if isSignedIn() && isValidId(eventId) && isValidId(gameId);
+        allow list: if isSignedIn() && isValidId(gameId);
+
+        allow create: if isSignedIn() &&
+          isValidId(eventId) &&
+          isValidId(gameId) &&
+          isValidEvent(incoming()) &&
+          incoming().gameId == gameId &&
+          incoming().id == eventId &&
+          (
+            request.auth.uid == get(/databases/$(database)/documents/games/$(gameId)).data.playerXId ||
+            request.auth.uid == get(/databases/$(database)/documents/games/$(gameId)).data.get('playerOId', '')
+          );
+
+        allow update, delete: if false;
+      }
+    }
+
+    match /users/{userId}/public/profile {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        incoming().id == userId;
+      allow delete: if false;
+    }
+  }
+}

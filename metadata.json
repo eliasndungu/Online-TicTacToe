@@ -1,0 +1,6 @@
+{
+  "name": "Chronos Tic-Tac-Toe",
+  "description": "Multiplayer and minimax AI Tic-Tac-Toe with event-sourced state history and time-travel rollback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
